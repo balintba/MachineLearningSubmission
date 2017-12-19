@@ -1,0 +1,191 @@
+---
+title: "Assignement for Machine Learning"
+author: "Balazs Balint"
+date: "11 December 2017"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(caret)
+library(dplyr)
+```
+
+# 1. Synopsis
+
+In this assignment I will evaluate personal training data. We will try to predict how well any given excercise has been done by the user.
+This information is in the "classe" variable. I will try to predict this variable.
+
+
+# 2. Getting acquinted with the data
+
+The training and testing data is read into R using the read.csv function
+
+```{r, echo=FALSE}
+setwd("D:/Balazs/Data Analysis/Assignement 3")
+```
+
+```{r}
+training <- read.csv("pml-training.csv")
+```
+
+## 2.1. General Characteristics
+
+Checking the dimension, variable names and the possible outcomes
+
+```{r}
+dim(training)
+
+names(training)
+
+summary(training$classe)
+```
+
+So we have 159 predictors and we try to predict a factor variable with 5 different outcome possibilities.
+
+I will delete the first 7 coloumns since these are not needed for our model (observation number, user name, timestamps, etc)
+
+```{r}
+  training <- training[,-(1:7)]
+  head(training)
+```
+
+
+I have decided to omit all factor variables and the variables containing NAs, since these contain summarized information for the day before
+
+```{r}
+  # Deleting all factor variables
+  idx <- which(sapply(X = training[,-dim(training)[2]], FUN = is.factor))
+
+  training <- training[,-idx]
+  
+  names(training)
+```
+
+
+```{r}
+  #Now I will delete all variable, which have more than 50% NA`s. These are aggregated values, as for example "avg_pitch_arm"
+  idy <- colSums(is.na(training[,-dim(training)[2]]))/dim(training)[1]
+  
+  training <- training[,-which(idy>0.5)]
+  dim(training)
+  
+
+```
+
+we have 53 columns left
+
+
+## 2.2 Missing Values
+
+Let us check, whether we have missing values in our data
+
+```{r}
+  any(is.na(training))
+  any(is.na(training$classe))
+```
+
+It seems that after the data cleaning, there are no more missing values in the data set.
+
+## 2.3 Data Partitioning
+
+I will split the data set into training/testing partitions.
+
+```{r}
+  inTrain <- createDataPartition(training$classe, p=0.85,list=F)
+  testing <- training[-inTrain,]
+  training <- training[inTrain,]
+  
+  dim(training)
+  dim(testing)
+```
+
+
+## 2.4. Centering, Scaling
+
+In order to bring all variables to the same magnitude, I will also use centering and scaling using the PreProcess function
+
+```{r}
+  prePr1 <- preProcess(training, method = c("center","scale"))
+  training <- predict(prePr1,newdata=training)
+  testing <- predict(prePr1,newdata=testing)
+```
+Proving the first predictor, whether centering and scaling was successfull
+
+```{r}
+  mean(training[,1])
+  sd(training[,1])
+```
+
+## 2.4. Near Zero Values
+
+We are going to check now whether there are Near Zero Covariates
+
+```{r}
+  nsv <- nearZeroVar(training,saveMetrics = T)
+  any(nsv$zeroVar==T)
+```
+
+There are no Near Value Covariates
+
+# 3. Cross Validation
+
+As it was asked in the assignement description I will now set up a cross validation process using the train control
+option in the caret package
+
+```{r}
+  train_control <- trainControl(method="cv",number=10, savePredictions = TRUE)
+
+```
+
+
+# 4. Predicting with a random forest
+
+I will fit first a random forest
+
+```{r}
+  modFitTree<- train(classe~.,data=training,trControl=train_control,method="rf")  
+
+  predTrain <- predict(modFitTree,newdata=training)
+  predTest <- predict(modFitTree,newdata=testing)
+
+```
+Calculating the training/testing accuracy
+
+```{r}
+  #Training accuracy
+  sum(predTrain == training$classe)/length(training$classe)
+  
+  #Testing accuracy
+  sum(predTest == testing$classe)/length(testing$classe)
+
+```
+
+As it seems we could achieve very good accuracy on the testing set as well.
+
+
+# 5. Predicting with boosting
+
+I will try another model with boosting
+
+```{r}
+  modFitBoost<- train(classe~.,data=training,trControl=train_control,method="gbm")  
+
+  predTrain1 <- predict(modFitBoost,newdata=training)
+  predTest1 <- predict(modFitBoost,newdata=testing)
+
+```
+```{r}
+  #Training accuracy
+  sum(predTrain1 == training$classe)/length(training$classe)
+  
+  #Testing accuracy
+  sum(predTest1 == testing$classe)/length(testing$classe)
+```
+
+
+We can see that the random forest has better prediction accuracy.
+
